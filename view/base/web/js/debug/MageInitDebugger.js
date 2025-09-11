@@ -86,7 +86,7 @@ define([], function () {
                 const names = Object.keys(init.mageInit['*'] || init.mageInit || {})
                 initType += " " + names.join(", ")
 
-                console.group(`%c${initType}`, `${this.badgeStyle || ''}; font-size: ${this.largerFontSize}`)
+                console.groupCollapsed(`%c${initType}`, `${this.badgeStyle || ''}; font-size: ${this.largerFontSize}`)
                 if (element !== init.el) {
                     console.log("Element: ", init.el)
                 }
@@ -95,7 +95,7 @@ define([], function () {
             })
 
             if (element === document.body) {
-                console.group('%cHead Inits:', `font-size: ${this.largerFontSize}`)
+                console.groupCollapsed('%cHead Inits:', `font-size: ${this.largerFontSize}`)
                 this.consolePrint(document.head)
                 console.groupEnd()
             }

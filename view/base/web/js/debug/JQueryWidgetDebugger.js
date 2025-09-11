@@ -94,14 +94,14 @@ define(['jquery', 'jquery-ui-modules/widget'], function ($) {
         consolePrint (element) {
             const inits = initialized.filter(i => i.element === element)
 
-            if (!inits.length === 0) {
+            if (inits.length === 0) {
                 return
             }
 
             console.group('%cjQuery:', `font-size: ${this.largerFontSize}`)
 
             inits.forEach(initData => {
-                console.group(
+                console.groupCollapsed(
                     `%c$.${initData.widget}`,
                     `${this.badgeStyle || ''}; font-size: ${this.largerFontSize}`,
                 )
