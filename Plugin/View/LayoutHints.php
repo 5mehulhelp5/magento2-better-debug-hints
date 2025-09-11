@@ -2,12 +2,16 @@
 
 namespace KingfisherDirect\BetterDebugHints\Plugin\View;
 
+use KingfisherDirect\BetterDebugHints\DB\Profiler as BdhProfiler;
 use KingfisherDirect\BetterDebugHints\Helper\Config;
 use Magento\Backend\Helper\Data;
 use Magento\Cms\Block\Widget\Block as WidgetBlock;
-use Magento\Framework\View\Helper\SecureHtmlRenderer;
+use Magento\Framework\App\ResourceConnection;
+use Magento\Framework\DB\Profiler;
 use Magento\Framework\Interception\InterceptorInterface;
+use Magento\Framework\View\Asset\Repository;
 use Magento\Framework\View\Element\AbstractBlock;
+use Magento\Framework\View\Helper\SecureHtmlRenderer;
 use Magento\Framework\View\Layout;
 use Magento\Framework\View\Layout\Element;
 
@@ -19,13 +23,21 @@ class LayoutHints
 
     private bool $isEnabled;
 
+    private false|Profiler $dbProfiler;
+
     private array $timings = [];
+
+    private array $allDbProfiles = [];
+
+    private array $elProfiles = [];
 
     public function __construct(
         Layout $layout,
         Config $config,
         Data $helperBackend,
-        private SecureHtmlRenderer $secureHtmlRenderer
+        private SecureHtmlRenderer $secureHtmlRenderer,
+        private ResourceConnection $resourceConnection,
+        private Repository $assets,
     ) {
         $this->blockEditUrl = $helperBackend->getUrl('cms/block/edit', ['block_id' => '__id__']);
         $this->isEnabled = $config->isHintEnabled();
@@ -34,11 +46,27 @@ class LayoutHints
 
     public function aroundRenderElement(Layout $layout, \Closure $proceed, string $name, $useCache = true): string
     {
+        $startProfiles = $name === 'root'
+            ? []
+            : $this->collectDBQueryProfiles();
+
         $start = hrtime(true);
         $html = $proceed($name, $useCache);
         $end = hrtime(true);
         $total = $end - $start;
         $this->timings[$name] = $total;
+
+        $endProfiles = $this->collectDBQueryProfiles();
+
+        $elProfiles = array_udiff(
+            $endProfiles,
+            $startProfiles,
+            $this->allDbProfiles,
+            fn (\Zend_Db_Profiler_Query $a, \Zend_Db_Profiler_Query $b) => $a === $b ? 0 : $a->getStartedMicrotime() <=> $b->getStartedMicrotime()
+        );
+        $this->elProfiles[$name] = $elProfiles;
+
+        array_push($this->allDbProfiles, ...$elProfiles);
 
         if (!$this->isEnabled || !$html || !trim($html)) {
             return $html;
@@ -71,13 +99,6 @@ class LayoutHints
         $blockEditUrl = $this->getBlockEditUrl();
 
         return $this->secureHtmlRenderer->renderTag('script', ['type' => 'text/javascript'], <<<JS
-            // const _bdh = {
-            //     async db () {
-            //         const mod = await import("{$dbProfileJS}")
-            //         return mod.dbProfile({$dbQueryProfileJson})
-            //     }
-            // }
-
             require(['KingfisherDirect_BetterDebugHints/js/LayoutHints'], function (LayoutHints) {
                 var layoutHints = new LayoutHints({$structureJson}, {
                     blockEditUrl: "{$blockEditUrl}",
@@ -86,8 +107,6 @@ class LayoutHints
                 if (!window.layout) {
                     window.layout = layoutHints.inspect.bind(layoutHints)
                 }
-
-                _bdh.lh = layoutHints
 
                 if (!window.lh) {
                     window.lh = layoutHints
@@ -149,6 +168,12 @@ class LayoutHints
             ];
         }
 
+        if ($this->elProfiles[$name] ?? null) {
+            $result['db'] = [
+                'profiles' => array_values(array_map([$this, 'normalizeDbQueryProfile'], $this->elProfiles[$name])),
+            ];
+        }
+
         return $result;
     }
 
@@ -162,6 +187,50 @@ class LayoutHints
             'cacheKeyInfo' => @$block->getCacheKeyInfo(),
             'cacheLifetime' => $block->getCacheLifetime()
         ];
+    }
+
+    private function getDbProfiler(): ?Profiler
+    {
+        if (isset($this->dbProfiler)) {
+            return $this->dbProfiler ?: null;
+        }
+
+        $connection = $this->resourceConnection->getConnection('read');
+        if (!$connection instanceof \Zend_Db_Adapter_Abstract) {
+            $this->dbProfiler = false;
+            return null;
+        }
+
+        $profiler = $connection->getProfiler();
+        if (!($profiler instanceof Profiler)) {
+            $this->dbProfiler = false;
+            return null;
+        }
+
+        return $this->dbProfiler = $profiler;
+    }
+
+    private function collectDBQueryProfiles(): array
+    {
+        $profiler = $this->getDbProfiler();
+
+        return $profiler?->getQueryProfiles() ?: [];
+    }
+
+    private function normalizeDbQueryProfile(\Zend_Db_Profiler_Query $query): array
+    {
+        $profiler = $this->getDbProfiler();
+
+        $extraData = $profiler instanceof BdhProfiler
+            ? $profiler->getExtraData($query)
+            : [];
+
+        return array_merge([
+            'query' => $query->getQuery(),
+            'type' => $query->getQueryType(),
+            'elapsed' => $query->getElapsedSecs() * 1000,
+            'params' => $query->getQueryParams(),
+        ], $extraData);
     }
 
     /**

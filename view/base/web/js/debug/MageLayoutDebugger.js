@@ -177,6 +177,12 @@ define([], function () {
                 }
             }
 
+            if (layout.db?.profiles) {
+                const time = layout.db.profiles.reduce((acc, q) => acc += q.elapsed, 0)
+
+                content += `<div>DB: <code style="background: transparent">${time}ms</code>  <small>(${layout.db.profiles.length} queries)</small></div>`
+            }
+
             return layout.elements.map(element => {
                 return {
                     element,
@@ -261,6 +267,16 @@ define([], function () {
 
             if (layoutElement.timings?.ownMs) {
                 console.log(`Own Time:\n%c${layoutElement.timings.ownMs}ms (${Math.round(layoutElement.timings.ownPercentage * 100 * 100) / 100}%)`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
+            }
+
+            if (layoutElement.db?.profiles) {
+                const time = layoutElement.db.profiles.reduce((acc, q) => acc += q.elapsed, 0)
+
+                console.groupCollapsed(`DB:\n%c${time}ms, ${layoutElement.db.profiles.length} queries`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
+
+                console.table(layoutElement.db.profiles)
+
+                console.groupEnd()
             }
 
             if (layoutElement.parent && withParent) {
