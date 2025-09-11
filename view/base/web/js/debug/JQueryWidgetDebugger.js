@@ -66,9 +66,15 @@ define(['jquery', 'jquery-ui-modules/widget'], function ($) {
             const elementInitialized = initialized.filter(i => i.element === element)
 
             const highlightsData = elementInitialized.map(i => {
+                try {
+                    var optionsJson = JSON.stringify(i.options, null, 2)
+                } catch {
+                    optionsJson = "Click to inspect options in console"
+                }
+
                 return {
                     badges: ["$." + i.widget],
-                    content: `<pre>${JSON.stringify(i.options, null, 2)}</pre>`
+                    content: `<pre>${optionsJson}</pre>`
                 }
             })
 
