@@ -51,8 +51,8 @@ class LayoutHints
         }
 
         return
-            "<script type='text/mage-debug' data-mage-debug-position='start' data-mage-debug='$name'></script>".
-            $html.
+            "<script type='text/mage-debug' data-mage-debug-position='start' data-mage-debug='$name'></script>" .
+            $html .
             "<script type='text/mage-debug' data-mage-debug-position='end' data-mage-debug='$name'></script>";
     }
 
@@ -97,6 +97,10 @@ class LayoutHints
     {
         $result = [];
 
+        if (!$this->layout) {
+            throw new \LogicException("Module is not enabled or layout prop is missing for another reason");
+        }
+
         if ($name === 'root') {
             $result['handles'] = $this->layout->getUpdate()->getHandles();
         }
@@ -123,7 +127,7 @@ class LayoutHints
 
         $block = $this->layout->getBlock($name);
 
-        if ($block) {
+        if ($block instanceof AbstractBlock) {
             $result['block'] = $this->getBlockInfo($block);
         }
 
