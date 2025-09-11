@@ -10,13 +10,12 @@ define([], function () {
             highlightEl.style.color = 'var(--hl-color, blue))'
             highlightEl.style.textShadow = "0 0 1px var(--hl-bg, rgba(255, 50, 100))"
             highlightEl.style.zIndex = 999999
-            highlightEl.style.padding = ".5em"
             highlightEl.style.cursor = "pointer"
             highlightEl.style.fontSize = "1rem"
 
             if (html) {
                 highlightEl.innerHTML = `
-                    <div style="position: sticky; top: .5em">
+                    <div style="position: sticky; top: .5em; backdrop-filter: blur(.15rem); padding: .5em">
                     ${html}
                     </div>
                 `
@@ -36,8 +35,6 @@ define([], function () {
                 // remove sticky to allow better scrolling if content exceeds highlgiht
                 const content = highlightEl.children[0]
                 const { height } = content.getBoundingClientRect()
-
-                console.log(height, window.innerHeight)
 
                 if (height > window.innerHeight) {
                     content.style.position = "static"
