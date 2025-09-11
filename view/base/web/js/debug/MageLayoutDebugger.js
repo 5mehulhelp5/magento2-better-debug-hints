@@ -10,6 +10,7 @@ define([], function () {
 
             layoutTree.elements = [document.body]
             document.body.mageLayout = layoutTree
+            this.totalMs = layoutTree.timings.total / 1_000_000
 
             this.layoutItems = this.flattenLayout(layoutTree)
 
@@ -27,13 +28,32 @@ define([], function () {
             var flat = {}
 
             for (var name in layout.children) {
-                var child = layout.children[name]
-                flat[name] = child
-                child.name = name
-                child.parent = layout
+                var layoutEl = layout.children[name]
+                flat[name] = layoutEl
+                layoutEl.name = name
+                layoutEl.parent = layout
 
-                if (child.children) {
-                    Object.assign(flat, this.flattenLayout(child))
+                const childrenLayout = layoutEl.children ? this.flattenLayout(layoutEl) : {}
+
+                if (layoutEl.children) {
+                    Object.assign(flat, childrenLayout)
+                }
+
+                if (layoutEl.timings) {
+                    layoutEl.timings.totalMs = layoutEl.timings.total / 1_000_000
+                    layoutEl.timings.totalPercentage = layoutEl.timings.totalMs / this.totalMs
+
+                    let childTime = 0
+                    for (const child of Object.values(childrenLayout)) {
+                        if (child.parent === layoutEl) {
+                            childTime += child?.timings?.total || 0
+                        }
+                    }
+
+                    if (childTime > 0) {
+                        layoutEl.timings.ownMs = Math.max(0, layoutEl.timings.totalMs - (childTime / 1_000_000))
+                        layoutEl.timings.ownPercentage = layoutEl.timings.ownMs / this.totalMs
+                    }
                 }
             }
 
@@ -149,6 +169,14 @@ define([], function () {
                 }
             }
 
+            if (layout.timings && layout.timings.totalMs > 1) {
+                content += `<div>Time: <code style="background: transparent">${layout.timings.totalMs}ms</code> <small>(${Math.round(layout.timings.totalPercentage * 100 * 100) / 100}%)</small></div>`
+
+                if (layout.timings.ownMs) {
+                    content += `<div>Own Time: <code style="background: transparent">${layout.timings.ownMs}ms</code>  <small>(${Math.round(layout.timings.ownPercentage * 100 * 100) / 100}%)</small></div>`
+                }
+            }
+
             return layout.elements.map(element => {
                 return {
                     element,
@@ -225,6 +253,14 @@ define([], function () {
                 if (layoutElement.block.moduleName) {
                     console.log(`Module Name:\n%c${layoutElement.block.moduleName}`, "font-weight: bold;");
                 }
+            }
+
+            if (layoutElement.timings?.totalMs) {
+                console.log(`Total Time:\n%c${layoutElement.timings.totalMs}ms (${Math.round(layoutElement.timings.totalPercentage * 100 * 100) / 100}%)`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
+            }
+
+            if (layoutElement.timings?.ownMs) {
+                console.log(`Own Time:\n%c${layoutElement.timings.ownMs}ms (${Math.round(layoutElement.timings.ownPercentage * 100 * 100) / 100}%)`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
             }
 
             if (layoutElement.parent && withParent) {

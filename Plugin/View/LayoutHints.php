@@ -14,8 +14,12 @@ use Magento\Framework\View\Layout\Element;
 class LayoutHints
 {
     private ?Layout $layout;
+
     private string $blockEditUrl;
+
     private bool $isEnabled;
+
+    private array $timings = [];
 
     public function __construct(
         Layout $layout,
@@ -30,7 +34,11 @@ class LayoutHints
 
     public function aroundRenderElement(Layout $layout, \Closure $proceed, string $name, $useCache = true): string
     {
+        $start = hrtime(true);
         $html = $proceed($name, $useCache);
+        $end = hrtime(true);
+        $total = $end - $start;
+        $this->timings[$name] = $total;
 
         if (!$this->isEnabled || !$html || !trim($html)) {
             return $html;
@@ -133,6 +141,12 @@ class LayoutHints
 
         if ($block instanceof WidgetBlock) {
             $result['blockId'] = $block->getBlockId();
+        }
+
+        if ($this->timings[$name] ?? null) {
+            $result['timings'] = [
+                'total' => $this->timings[$name],
+            ];
         }
 
         return $result;
