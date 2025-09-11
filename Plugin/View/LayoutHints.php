@@ -33,6 +33,8 @@ class LayoutHints
 
     private array $elProfiles = [];
 
+    private float $bootstrapTime;
+
     public function __construct(
         Layout $layout,
         Config $config,
@@ -50,6 +52,10 @@ class LayoutHints
 
     public function aroundRenderElement(Layout $layout, \Closure $proceed, string $name, $useCache = true): string
     {
+        if ($name === 'root') {
+            $this->bootstrapTime = microtime(true) - $_SERVER['REQUEST_TIME_FLOAT'];
+        }
+
         $startProfiles = $name === 'root'
             ? []
             : $this->collectDBQueryProfiles();
@@ -170,6 +176,10 @@ class LayoutHints
             $result['timings'] = [
                 'total' => $this->timings[$name],
             ];
+
+            if ($name === 'root') {
+                $result['timings']['bootstrapMs'] = $this->bootstrapTime * 1000;
+            }
         }
 
         if ($this->elProfiles[$name] ?? null) {

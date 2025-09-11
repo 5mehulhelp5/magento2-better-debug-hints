@@ -10,11 +10,14 @@ define([], function () {
 
             layoutTree.elements = [document.body]
             document.body.mageLayout = layoutTree
-            this.totalMs = layoutTree.timings.total / 1_000_000
+            this.totalMs = (layoutTree.timings.total / 1_000_000) + (layoutTree.timings.bootstrapMs || 0)
 
             this.layoutItems = this.flattenLayout(layoutTree)
+            this.normalizeLayoutItem(layoutTree)
 
             for (var childName in this.layoutItems) {
+                this.normalizeLayoutItem(this.layoutItems[childName])
+
                 var layoutElement = this.layoutItems[childName]
                 this.collectElements(childName, layoutElement)
             }
@@ -38,26 +41,26 @@ define([], function () {
                 if (layoutEl.children) {
                     Object.assign(flat, childrenLayout)
                 }
-
-                if (layoutEl.timings) {
-                    layoutEl.timings.totalMs = layoutEl.timings.total / 1_000_000
-                    layoutEl.timings.totalPercentage = layoutEl.timings.totalMs / this.totalMs
-
-                    let childTime = 0
-                    for (const child of Object.values(childrenLayout)) {
-                        if (child.parent === layoutEl) {
-                            childTime += child?.timings?.total || 0
-                        }
-                    }
-
-                    if (childTime > 0) {
-                        layoutEl.timings.ownMs = Math.max(0, layoutEl.timings.totalMs - (childTime / 1_000_000))
-                        layoutEl.timings.ownPercentage = layoutEl.timings.ownMs / this.totalMs
-                    }
-                }
             }
 
             return flat
+        }
+
+        normalizeLayoutItem (layout) {
+            if (layout.timings) {
+                layout.timings.totalMs = layout.timings.total / 1_000_000
+                layout.timings.totalPercentage = layout.timings.totalMs / this.totalMs
+
+                let childTime = 0
+                for (const child of Object.values(layout.children || {})) {
+                    childTime += child?.timings?.total || 0
+                }
+
+                if (childTime > 0) {
+                    layout.timings.ownMs = Math.max(0, layout.timings.totalMs - (childTime / 1_000_000))
+                    layout.timings.ownPercentage = layout.timings.ownMs / this.totalMs
+                }
+            }
         }
 
         /**
@@ -184,17 +187,21 @@ define([], function () {
             }
 
             if (layout.timings && layout.timings.totalMs > 1) {
-                content += `<div>Time: <code style="background: transparent">${layout.timings.totalMs}ms</code> <small>(${Math.round(layout.timings.totalPercentage * 100 * 100) / 100}%)</small></div>`
+                if (layout.timings.bootstrapMs) {
+                    content += `<div>Bootstrap: <code style="background: transparent">${Math.round(layout.timings.bootstrapMs)}ms</code></div>`
+                }
+
+                content += `<div>Render Time: <code style="background: transparent">${Math.round(layout.timings.totalMs)}ms</code> <small>(${Math.round(layout.timings.totalPercentage * 100 * 100) / 100}%)</small></div>`
 
                 if (layout.timings.ownMs) {
-                    content += `<div>Own Time: <code style="background: transparent">${layout.timings.ownMs}ms</code>  <small>(${Math.round(layout.timings.ownPercentage * 100 * 100) / 100}%)</small></div>`
+                    content += `<div>Own Render Time: <code style="background: transparent">${Math.round(layout.timings.ownMs)}ms</code>  <small>(${Math.round(layout.timings.ownPercentage * 100 * 100) / 100}%)</small></div>`
                 }
             }
 
             if (layout.db?.profiles) {
                 const time = layout.db.profiles.reduce((acc, q) => acc += q.elapsed, 0)
 
-                content += `<div>DB: <code style="background: transparent">${time}ms</code>  <small>(${layout.db.profiles.length} queries)</small></div>`
+                content += `<div>DB: <code style="background: transparent">${Math.round(time)}ms</code>  <small>(${layout.db.profiles.length} queries)</small></div>`
             }
 
             return layout.elements.map(element => {
@@ -288,14 +295,13 @@ define([], function () {
 
                 console.groupCollapsed(`DB:\n%c${time}ms, ${layoutElement.db.profiles.length} queries`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
 
+                console.log(layoutElement.db.profiles)
                 console.table(layoutElement.db.profiles)
 
                 console.groupEnd()
             }
 
             if (layoutElement.parent && withParent) {
-                console.log(layoutElement.parent)
-                // parent element will be certainly magento layout
                 this.consolePrintElementData({ layout: layoutElement.parent }, { collapse: true, withChildren: false, groupPrefix: "Parent: " })
             }
 
