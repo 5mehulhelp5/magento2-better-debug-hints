@@ -6,6 +6,8 @@ use KingfisherDirect\BetterDebugHints\DB\Profiler as BdhProfiler;
 use KingfisherDirect\BetterDebugHints\Helper\Config;
 use Magento\Backend\Helper\Data;
 use Magento\Cms\Block\Widget\Block as WidgetBlock;
+use Magento\Framework\App\Cache\StateInterface as CacheStateInterface;
+use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\ResourceConnection;
 use Magento\Framework\DB\Profiler;
 use Magento\Framework\Interception\InterceptorInterface;
@@ -38,6 +40,8 @@ class LayoutHints
         private SecureHtmlRenderer $secureHtmlRenderer,
         private ResourceConnection $resourceConnection,
         private Repository $assets,
+        private CacheInterface $cache,
+        private CacheStateInterface $cacheState,
     ) {
         $this->blockEditUrl = $helperBackend->getUrl('cms/block/edit', ['block_id' => '__id__']);
         $this->isEnabled = $config->isHintEnabled();
@@ -184,8 +188,51 @@ class LayoutHints
             'template' => $block->getTemplateFile(),
             'moduleName' => $block->getModuleName(),
             'nameInLayout' => $block->getNameInLayout(),
-            'cacheKeyInfo' => @$block->getCacheKeyInfo(),
-            'cacheLifetime' => $block->getCacheLifetime()
+            'cache' => $this->getCacheInfo($block)
+        ];
+    }
+
+    private function getCacheInfo(AbstractBlock $block): array
+    {
+        $reflection = new \ReflectionClass($block);
+        $cacheLifetimeMethod = $reflection->getMethod('getCacheLifetime');
+        $cacheLifetimeMethod->setAccessible(true);
+
+        $cacheLifetime = $cacheLifetimeMethod->invoke($block);
+
+        if ($cacheLifetime === null) {
+            return [
+                'enabled' => false,
+            ];
+        }
+
+        $cacheKeyInfo = $block->getCacheKeyInfo();
+        $cacheKey = $block->getCacheKey();
+
+        // Check if block cache group is enabled using injected cache state
+        if (!$this->cacheState->isEnabled(\Magento\Framework\View\Element\AbstractBlock::CACHE_GROUP)) {
+            return [
+                'hit' => false,
+                'enabled' => false,
+                'lifetime' => $cacheLifetime,
+                'key' => $cacheKey,
+                'keyInfo' => $cacheKeyInfo
+            ];
+        }
+
+        // Use injected cache to check for cached data
+        $cacheStart = hrtime(true);
+        $cachedData = $this->cache->load($cacheKey);
+        $cacheEnd = hrtime(true);
+        $total = $cacheEnd - $cacheStart;
+
+        return [
+            'hit' => !empty($cachedData),
+            'enabled' => true,
+            'lifetime' => $cacheLifetime,
+            'key' => $cacheKey,
+            'time' => $total,
+            'keyInfo' => $cacheKeyInfo
         ];
     }
 

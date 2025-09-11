@@ -164,8 +164,22 @@ define([], function () {
                     <div>Template: <code style="background: transparent">${layout.block.template}</code></div>
                 `
 
-                if (layout.block.cacheLifetime) {
-                    content += `<div>Cache Lifetime: <code style="background: transparent">${layout.block.cacheLifetime}</code></div>`
+                if (layout.block.cache) {
+                    if (layout.block.cache.enabled) {
+                        content += `
+                            <div>
+                                Cache:
+                                <code style="background: transparent">
+                                    ${layout.block.cache.hit ? "Hit" : "Miss"}
+                                    ${layout.block.cache.hit ? ("~" + layout.block.cache.time / 1_000_000 + "ms") : ""}
+                                </code>
+                                <code style="background: transparent">${layout.block.cache.key}</code></code>
+                            </div>
+                            <div>Cache Lifetime: <code style="background: transparent">${layout.block.cache.lifetime}</code></div>
+                        `
+                    } else {
+                        content += `<div>Cache: <code style="background: transparent">Disabled</code></div>`
+                    }
                 }
             }
 
