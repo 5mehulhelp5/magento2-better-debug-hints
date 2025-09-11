@@ -65,6 +65,8 @@ define([
             document.documentElement.style.setProperty('--hl-color', `rgb(${colors.blue4})`)
             document.documentElement.style.setProperty('--hl-border-color', `rgb(${colors.blue2})`)
 
+            this.highlightedEl = undefined
+
             this.setupKeyListener()
         }
 
@@ -174,6 +176,15 @@ define([
         }
 
         onClickHighlight (element, event) {
+            if (this.highlightedEl === element) {
+                highlights.clear()
+                this.highlightedEl = undefined
+
+                return
+            }
+
+            this.highlightedEl = element
+
             if (event.target.tagName === 'A') {
                 return
             }
@@ -193,7 +204,6 @@ define([
             console.groupEnd()
 
             event.preventDefault()
-            highlights.clear()
             this.removeMouseTracker()
         }
 
