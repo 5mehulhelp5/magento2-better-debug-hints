@@ -180,8 +180,6 @@ define([], function () {
                             </div>
                             <div>Cache Lifetime: <code style="background: transparent">${layout.block.cache.lifetime}</code></div>
                         `
-                    } else {
-                        content += `<div>Cache: <code style="background: transparent">Disabled</code></div>`
                     }
                 }
             }
@@ -293,10 +291,9 @@ define([], function () {
             if (layoutElement.db?.profiles) {
                 const time = layoutElement.db.profiles.reduce((acc, q) => acc += q.elapsed, 0)
 
-                console.groupCollapsed(`DB:\n%c${time}ms, ${layoutElement.db.profiles.length} queries`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
-
-                console.log(layoutElement.db.profiles)
+                console.groupCollapsed(`DB:\n%c${Math.round(time * 100) / 100}ms, ${layoutElement.db.profiles.length} queries`, `font-size: ${this.largerFontSize}; font-weight: bold;`);
                 console.table(layoutElement.db.profiles)
+                console.log(layoutElement.db.profiles)
 
                 console.groupEnd()
             }
