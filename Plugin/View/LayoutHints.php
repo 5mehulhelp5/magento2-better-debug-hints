@@ -217,7 +217,11 @@ class LayoutHints
         }
 
         $cacheKeyInfo = $block->getCacheKeyInfo();
-        $cacheKey = $block->getCacheKey();
+        $cacheKey = null;
+        try {
+            $cacheKey = $block->getCacheKey();
+        } catch (\Throwable $e) {
+        }
 
         // Check if block cache group is enabled using injected cache state
         if (!$this->cacheState->isEnabled(\Magento\Framework\View\Element\AbstractBlock::CACHE_GROUP)) {
