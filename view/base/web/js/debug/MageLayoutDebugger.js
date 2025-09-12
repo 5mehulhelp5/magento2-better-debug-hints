@@ -301,6 +301,69 @@ define([], function () {
                 console.groupEnd()
             }
 
+            if (layoutElement.profiles) {
+                const profiles = []
+                let longest = null
+
+                for (const profileId in layoutElement.profiles) {
+                    const profileItem = layoutElement.profiles[profileId]
+
+                    if (!profileItem[2]) {
+                        continue
+                    }
+
+                    const totalMs = Math.round((profileItem[2] - profileItem[1]) * 1000 * 100) / 100
+                    const tags = profileItem[0]
+                    let profileName = profileId
+
+                    if (tags?.group === 'EVENT') {
+                        profileName = `[EVENT] ${tags.name}`
+                    } else if (tags?.group === 'TEMPLATE') {
+                        profileName = `[TEMPLATE] ${tags.file_name}`
+                    } else if (tags?.group === 'EAV') {
+                        profileName = `[EAV] ${tags.method}`
+                    } else {
+                        let observerMatches = profileId.match(/EVENT:([a-z0-9\-\_]*)->OBSERVER:([a-z0-9\-\_]*)/)
+
+                        if (observerMatches) {
+                            profileName = `[OBSERVER] ${observerMatches[2]}\n(Event: ${observerMatches[1]})`
+                        }
+                    }
+
+                    const profile = {
+                        profileName,
+                        start: profileItem[1],
+                        totalMs,
+                        tags: { ...(tags || {}), profileId }
+                    }
+
+                    profiles.push(profile)
+
+                    if (totalMs > (longest?.totalMs || 0)) {
+                        longest = profile
+                    }
+                }
+
+                if (profiles.length > 0) {
+                    const heading = `Magento Profiles:`
+                    const longestText = longest
+                        ? `, ${longest.totalMs}ms longest (${longest.profileName})`
+                        : ''
+
+                    console.groupCollapsed(
+                        `%c${heading}\n%c${profiles.length} profiles%c${longestText}`,
+                        `font-weight: normal;`,
+                        `font-size: ${this.largerFontSize}; font-weight: bold;`,
+                        `font-size: ${this.largerFontSize}; font-weight: normal;`
+                    )
+
+                    console.table(profiles)
+                    console.log(profiles)
+
+                    console.groupEnd();
+                }
+            }
+
             if (layoutElement.parent && withParent) {
                 this.consolePrintElementData({ layout: layoutElement.parent }, { collapse: true, withChildren: false, groupPrefix: "Parent: " })
             }

@@ -4,13 +4,15 @@ namespace KingfisherDirect\BetterDebugHints\Plugin\View;
 
 use KingfisherDirect\BetterDebugHints\DB\Profiler as BdhProfiler;
 use KingfisherDirect\BetterDebugHints\Helper\Config;
+use KingfisherDirect\BetterDebugHints\Profiler\HintDriver;
 use Magento\Backend\Helper\Data;
 use Magento\Cms\Block\Widget\Block as WidgetBlock;
 use Magento\Framework\App\Cache\StateInterface as CacheStateInterface;
 use Magento\Framework\App\CacheInterface;
 use Magento\Framework\App\ResourceConnection;
-use Magento\Framework\DB\Profiler;
+use Magento\Framework\DB\Profiler as DbProfiler;
 use Magento\Framework\Interception\InterceptorInterface;
+use Magento\Framework\Profiler as MageProfiler;
 use Magento\Framework\View\Asset\Repository;
 use Magento\Framework\View\Element\AbstractBlock;
 use Magento\Framework\View\Helper\SecureHtmlRenderer;
@@ -25,15 +27,21 @@ class LayoutHints
 
     private bool $isEnabled;
 
-    private false|Profiler $dbProfiler;
+    private false|DbProfiler $dbProfiler;
 
     private array $timings = [];
 
     private array $allDbProfiles = [];
 
-    private array $elProfiles = [];
+    private array $dbProfiles = [];
 
     private float $bootstrapTime;
+
+    private HintDriver $profileCollector;
+
+    private array $mageProfiles = [];
+
+    private bool $wasProfilerEnabled;
 
     public function __construct(
         Layout $layout,
@@ -48,39 +56,65 @@ class LayoutHints
         $this->blockEditUrl = $helperBackend->getUrl('cms/block/edit', ['block_id' => '__id__']);
         $this->isEnabled = $config->isHintEnabled();
         $this->layout = $this->isEnabled ? $layout : null;
+
+        if ($this->isEnabled) {
+            $this->profileCollector = new HintDriver();
+            $this->wasProfilerEnabled = MageProfiler::isEnabled();
+
+            MageProfiler::add($this->profileCollector);
+
+            if (!$this->wasProfilerEnabled) {
+                MageProfiler::disable();
+            }
+        }
     }
 
     public function aroundRenderElement(Layout $layout, \Closure $proceed, string $name, $useCache = true): string
     {
-        if ($name === 'root') {
-            $this->bootstrapTime = microtime(true) - $_SERVER['REQUEST_TIME_FLOAT'];
+        if ($this->isEnabled) {
+            $time = microtime(true);
+            $this->timings[$name] = [
+                'start' => $time,
+            ];
+            if ($name === 'root') {
+                $this->timings['root']['bootstrapMs'] = ($time - $_SERVER['REQUEST_TIME_FLOAT']) * 1000;
+            }
+
+            MageProfiler::enable();
+
+            $startProfiles = $name === 'root'
+                ? []
+                : $this->collectDBQueryProfiles();
+
+            $start = hrtime(true);
         }
 
-        $startProfiles = $name === 'root'
-            ? []
-            : $this->collectDBQueryProfiles();
-
-        $start = hrtime(true);
         $html = $proceed($name, $useCache);
+
+        if (!$this->isEnabled || !trim($html)) {
+            return $html;
+        }
+
         $end = hrtime(true);
         $total = $end - $start;
-        $this->timings[$name] = $total;
+        $this->timings[$name]['total'] = $total;
+        $this->mageProfiles[$name] = $this->profileCollector?->collect();
 
         $endProfiles = $this->collectDBQueryProfiles();
 
-        $elProfiles = array_udiff(
+        $dbProfiles = array_udiff(
             $endProfiles,
             $startProfiles,
             $this->allDbProfiles,
             fn (\Zend_Db_Profiler_Query $a, \Zend_Db_Profiler_Query $b) => $a === $b ? 0 : $a->getStartedMicrotime() <=> $b->getStartedMicrotime()
         );
-        $this->elProfiles[$name] = $elProfiles;
+        $this->dbProfiles[$name] = $dbProfiles;
 
-        array_push($this->allDbProfiles, ...$elProfiles);
-
-        if (!$this->isEnabled || !$html || !trim($html)) {
-            return $html;
+        if ($this->wasProfilerEnabled === false) {
+            MageProfiler::disable();
         }
+
+        array_push($this->allDbProfiles, ...$dbProfiles);
 
         if ($layout->getElementProperty($name, Element::CONTAINER_OPT_HTML_TAG)) {
             $label = "";
@@ -173,20 +207,16 @@ class LayoutHints
         }
 
         if ($this->timings[$name] ?? null) {
-            $result['timings'] = [
-                'total' => $this->timings[$name],
-            ];
-
-            if ($name === 'root') {
-                $result['timings']['bootstrapMs'] = $this->bootstrapTime * 1000;
-            }
+            $result['timings'] = $this->timings[$name];
         }
 
-        if ($this->elProfiles[$name] ?? null) {
+        if ($this->dbProfiles[$name] ?? null) {
             $result['db'] = [
-                'profiles' => array_values(array_map([$this, 'normalizeDbQueryProfile'], $this->elProfiles[$name])),
+                'profiles' => array_values(array_map([$this, 'normalizeDbQueryProfile'], $this->dbProfiles[$name])),
             ];
         }
+
+        $result['profiles'] = $this->mageProfiles[$name] ?? null;
 
         return $result;
     }
@@ -250,7 +280,7 @@ class LayoutHints
         ];
     }
 
-    private function getDbProfiler(): ?Profiler
+    private function getDbProfiler(): ?DbProfiler
     {
         if (isset($this->dbProfiler)) {
             return $this->dbProfiler ?: null;
@@ -263,7 +293,7 @@ class LayoutHints
         }
 
         $profiler = $connection->getProfiler();
-        if (!($profiler instanceof Profiler)) {
+        if (!($profiler instanceof DbProfiler)) {
             $this->dbProfiler = false;
             return null;
         }
