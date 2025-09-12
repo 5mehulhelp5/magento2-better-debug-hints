@@ -125,7 +125,7 @@ define([], function () {
         }
 
         isInspectable (element) {
-            return !!element.mageLayout
+            return !!element?.mageLayout
         }
 
         getInspectable (element) {
